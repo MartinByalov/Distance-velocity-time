@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Път, скорост и време на движение</title>
+    <script src="suica.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="Motion.css">
+
+
+    <script>
+        var v = 0; // Скорост
+        var S = 0; // Път 
+        var t = 0; // Време
+
+        var engine = false; // Двигател (по подразбиране: изключен).
+        var accelerate = false; // Ускоряване (по подразбиране: изключено).
+        var brakes = false; // Намаляване (по подразбиране: изключено).
+
+        var ahead = false; // Превключване на движение напред
+        var back = false; // Превключване на движението назад
+
+        var blink = false; // Подсветка на скоростомера
+
+        function main() {
+
+            s = new Suica();
+
+            orthographic(-100000, 100000);
+            lookAt([0, 0, 100], [0, 0, 0], [0, 1, 0]);
+            background([135 / 255, 206 / 255, 235 / 255]);
+
+            // Следим за натискането и пускането на бутон на мишката
+            s.gl.canvas.addEventListener('mousedown', mouseDown, false);
+            s.gl.canvas.addEventListener('mouseup', mouseUp, false);
+
+            // След натискане на бутон за "Начало", връщаме фокусът върху интерактивното поле (тук малко не можах да го направя, както трябва).
+            document.getElementById('a').focus(document.getElementById('suica_canvas'));
+
+            // Път
+            road = group([]);
+
+            road.add(rectangle([0, -190, 0], [55000, 30]).custom({
+                color: [34 / 255, 139 / 255, 34 / 255]
+            }));
+
+            for (var j = 0; j <= 750; j++) {
+
+                var x = random(-350, 27500);
+                var y = random(-170, -200);
+                var v = random(-170, -200);
+
+                road.add(segment([x, y, 1], [x, v, 0]).custom({
+                    color: [random((64 / 255), 0), random((191 / 255), 0), 0]
+                }));
+            }
+
+            road.add(rectangle([0, -80, 0], [55000, 40]).custom({
+                color: [34 / 255, 139 / 255, 34 / 255]
+            }));
+
+            for (var j = 0; j <= 750; j++) {
+
+                var x = random(-350, 27500);
+                var y = random(-55, -100);
+                var v = random(-55, -100);
+
+                road.add(segment([x, y, 1], [x, v, 0]).custom({
+                    color: [random((64 / 255), 0), random((191 / 255), 0), 0]
+                }));
+            }
+
+            // Долна бяла линия
+            road.add(rectangle([0, -175, 0], [55000, 7]).custom({
+                color: [1, 1, 1]
+            }));
+
+            // Горна бяла линия
+            road.add(rectangle([0, -105, 0], [55000, 3]).custom({
+                color: [1, 1, 1]
+            }));
+
+            // Настилка
+            road.add(rectangle([0, -140, 0], [55000, 70]).custom({
+                color: [64 / 255, 64 / 255, 64 / 255]
+            }));
+
+            // Единична прекъсната линия
+            var x = -350;
+
+            for (var i = 0; i < 500; i++) {
+
+                road.add(rectangle([x, -130, 1], [40, 10]).custom({
+                    color: [1, 1, 1]
+                }));
+
+                x += 80;
+            }
+
+            // Ограда
+            fence = group([]);
+
+            fence.add(rectangle([0, -103, 5], [55000, 5]));
+
+            fence.add(rectangle([0, -90, 10], [55000, 5]));
+
+            fence.mergeColor();
+            fence.color = [160 / 255, 82 / 255, 45 / 255];
+
+            var f = -350;
+
+            for (var i = 0; i < 1000; i++) {
+
+                fence.add(rectangle([f, -92, 5], [5, 20]));
+
+                f += 100;
+            }
+
+            fence.mergeColor();
+            fence.color = [160 / 255, 82 / 255, 45 / 255];
+
+            road.add(fence);
+
+            // Пътни табели
+            drawTables();
+
+            // град София
+            generateCity(-250);
+
+            // табела на град София
+            sofia = group([]);
+
+            sofia_base = cuboid([-200, -50, 20], [40, 70, 1]).custom({
+                color: [220 / 255, 220 / 255, 220 / 255]
+            });
+            sofia_base.spin = -1.57;
+
+            sofia.add(sofia_base);
+
+            sofia.add(cuboid([-220, -75, 2], [5, 60, 1]).custom({
+                color: [105 / 255, 105 / 255, 105 / 255]
+            }));
+            sofia.add(cuboid([-180, -75, 2], [5, 60, 1]).custom({
+                color: [105 / 255, 105 / 255, 105 / 255]
+            }));
+            road.add(sofia);
+
+            sofia_base.image = new Suica.Image('Images\Sofia.jpg');
+
+            // град Варна
+            generateCity(25100);
+
+            // табела на град Варна
+            varna = cuboid([25000, -20, 20], [40, 70, 1]).custom({
+                color: [220 / 255, 220 / 255, 220 / 255]
+            });
+            varna.spin = -1.57;
+
+            road.add(varna);
+
+            varna.image = new Suica.Image('Images\Varna.jpg');
+
+            // Кола
+            car = group([]);
+
+            base = cuboid([-250, -120, 25], [120, 30, 10]);
+            base.spin = 0.02;
+            car.add(base);
+
+            tilt_u = cube([-295, -112, 2], [30]);
+            tilt_u.spin = 1;
+            car.add(tilt_u);
+
+            tilt_d = cube([-310, -125, 2], [10]);
+            tilt_d.spin = 1;
+            car.add(tilt_d);
+
+            tilt_m = cube([-305, -115, 2], [20]);
+            car.add(tilt_m);
+
+            front_d = cube([-190, -123, 2], [20]);
+            front_d.spin = 0.7;
+            car.add(front_d);
+
+            front_u = spheroid([-185, -114, 2], [12, 3, 1]);
+            front_u.spin = 0.7;
+            car.add(front_u);
+
+            frame = spheroid([-253, -105, 20], [42, 15, 1]);
+            frame.spin = 0.2;
+            car.add(frame);
+
+            car.mergeColor();
+            car.color = [128 / 255, 0, 0];
+
+            // Задна гума
+            tyre_b = group([]);
+
+            tyre_b.add(spheroid([-290, -130, 30], [13, 13, 13]).custom({
+                color: [0, 0, 0]
+            }));
+
+            // Задна джанта
+            tyre_b.add(spheroid([-290, -130, 40], [8, 8, 8]).custom({
+                color: [169 / 255, 169 / 255, 169 / 255]
+            }));
+
+            // Задна вертикална линия на джанта
+            tyre_b_v_r = cuboid([-290, -130, 50], [1, 10, 0]).custom({
+                color: [0, 0, 0]
+            });
+            tyre_b.add(tyre_b_v_r);
+
+            // Задна хоризонтална линия на джанта
+            tyre_b_h_r = cuboid([-290, -130, 50], [10, 1, 0]).custom({
+                color: [0, 0, 0]
+            });
+
+            tyre_b.add(tyre_b_h_r);
+
+            tyre_b.add(spheroid([-290, -130, 60], [2, 2, 2]).custom({
+                color: [1, 1, 1]
+            }));
+
+            car.add(tyre_b);
+
+            // Предна гума
+            tyre_f = group([]);
+
+            tyre_f.add(spheroid([-210, -130, 30], [13, 13, 13]).custom({
+                color: [0, 0, 0]
+            }));
+
+            // Предна джанта
+            tyre_f.add(spheroid([-210, -130, 40], [8, 8, 8]).custom({
+                color: [169 / 255, 169 / 255, 169 / 255]
+            }));
+
+            // Предна вертикална линия на джанта
+            tyre_f_h_r = cuboid([-210, -130, 50], [1, 10, 0]).custom({
+                color: [0, 0, 0]
+            });
+
+            tyre_f.add(tyre_f_h_r);
+
+            // Предна хоризонтална линия на джанта
+            tyre_f_v_r = cuboid([-210, -130, 50], [10, 1, 0]).custom({
+                color: [0, 0, 0]
+            });
+
+            tyre_f.add(tyre_f_v_r);
+
+            tyre_f.add(spheroid([-210, -130, 60], [2, 2, 2]).custom({
+                color: [1, 1, 1]
+            }));
+
+            car.add(tyre_f);
+
+            // Стъкла
+            glass = spheroid([-260, -105, 25], [35, 10, 1]).custom({
+                color: [224 / 255, 1, 1]
+            });
+            glass.spin = 0.1;
+
+            car.add(glass);
+
+            car.add(segment([-260, -95, 150], [-255, -105, 2]).custom({
+                color: [0, 0, 0]
+            }));
+
+            // Дръжки на вратите
+            car.add(segment([-278, -110, 50], [-273, -110, 20]).custom({
+                color: [0, 0, 0]
+            }));
+
+            car.add(segment([-248, -110, 50], [-243, -110, 20]).custom({
+                color: [0, 0, 0]
+            }));
+
+            // Фар
+            light = spheroid([-185, -114, 20], [5, 2, 1]).custom({
+                color: [240 / 255, 1, 1]
+            });
+            light.spin = 0.7;
+
+            car.add(light);
+
+            // Скорости
+            sun = circle([270, 120, 0], 50).custom({
+                color: [240 / 255, 230 / 255, 140 / 255]
+            });
+
+            // Бутон за ускоряване
+            acc = polygon([270, 140, 1], 30, 3).custom({
+                color: [1, 215 / 255, 0]
+            });
+            acc.spin = 0.52;
+
+            acc_m = polygon([270, 140, 2], 15, 3).custom({
+                color: [220 / 255, 20 / 255, 60 / 255]
+            });
+            acc_m.spin = 0.52;
+
+            // Бутон за намаляне
+            br = polygon([270, 100, 1], 30, 3).custom({
+                color: [1, 215 / 255, 0]
+            });
+            br.spin = -0.52;
+
+            br_m = polygon([270, 100, 2], 15, 3).custom({
+                color: [220 / 255, 20 / 255, 60 / 255]
+            });
+            br_m.spin = -0.52;
+
+            // Скоростомер
+            text_field = (cuboid([-280, 110, 0], [120, 150, 1]).custom({
+                color: [135 / 255, 206 / 255, 235 / 255]
+            }));
+            
+            // Позициониране на рамката и текста на "Таблото с изчислени стойностти" върху страницата
+            var v_l = document.getElementById('v');
+            v_l.style.top = -2835 + "px";
+            v_l.style.left = -270 + "px";
+
+            var s_l = document.getElementById('S');
+            s_l.style.top = -2820 + "px";
+            s_l.style.left = -270 + "px";
+
+            var t_l = document.getElementById('t');
+            t_l.style.top = -2805 + "px";
+            t_l.style.left = -270 + "px";
+            
+             var border = document.getElementById('b');
+            border.style.top = -2710 + "px";
+            border.style.left = 15 + "px";
+            
+            // Позициониране на падащите менюта за преобразуване от една величина към друга
+            var select_1 = document.getElementById('sel_1');
+            select_1.style.top = 2 + "px";
+            select_1.style.left = -5 + "px";
+
+            var select_2 = document.getElementById('sel_2');
+            select_2.style.top = 2 + "px";
+            select_2.style.left = -6 + "px";
+
+        }
+
+        function generateCity(x) {
+
+            city = group([]);
+            block_1 = group([]);
+
+            block_1.add(cuboid([x, 15, 5], [80, 150, 1]));
+            block_1.add(cuboid([x, 90, 0], [60, 10, 1]));
+            block_1.add(cuboid([x, 100, 0], [40, 10, 1]));
+
+            block_1.mergeColor();
+            block_1.color = [95 / 255, 158 / 255, 160 / 255];
+
+            city.add(block_1);
+
+            city.add(cuboid([x, -85, 10], [50, 50, 1]).custom({
+                color: [64 / 255, 64 / 255, 64 / 255]
+            }));
+            city.add(cuboid([x, -95, 15], [10, 12, 1]).custom({
+                color: [1, 1, 1]
+            }));
+            city.add(cuboid([x, -70, 15], [10, 12, 1]).custom({
+                color: [1, 1, 1]
+            }));
+
+            // Прозорци
+            windows_1 = group([]);
+
+            // Трети етаж
+            windows_1.add(cuboid([x - 20, 60, 10], [10, 15, 1]));
+            windows_1.add(cuboid([x, 60, 10], [10, 15, 1]));
+            windows_1.add(cuboid([x + 20, 60, 10], [10, 15, 1]));
+
+            // Втори етаж
+            windows_1.add(cuboid([x - 20, 30, 10], [10, 15, 1]));
+            windows_1.add(cuboid([x, 30, 10], [10, 15, 1]));
+            windows_1.add(cuboid([x + 20, 30, 10], [10, 15, 1]));
+
+            // Първи етаж
+            windows_1.add(cuboid([x - 20, 0, 10], [10, 15, 1]));
+            windows_1.add(cuboid([x + 20, 0, 10], [10, 15, 1]));
+
+            windows_1.mergeColor();
+            windows_1.color = [105 / 255, 105 / 255, 105 / 255];
+            block_1.add(windows_1);
+
+            // Партер
+            city.add(cuboid([x, -45, 10], [20, 35, 1]).custom({
+                color: [169 / 255, 169 / 255, 169 / 255]
+            }));
+
+            block_2 = group([]);
+
+            block_2.add(cuboid([x + 90, -5, 5], [70, 110, 1]).custom({
+                color: [1, 160 / 255, 122 / 255]
+            }));
+            block_2.add(cuboid([x + 110, 55, 0], [10, 15, 1]).custom({
+                color: [160 / 255, 82 / 255, 45 / 255]
+            }));
+            block_2.add(cuboid([x + 95, 55, 0], [10, 10, 1]).custom({
+                color: [160 / 255, 82 / 255, 45 / 255]
+            }));
+
+            city.add(block_2);
+
+            // Прозорци
+            windows_2 = group([]);
+
+            // Трети етаж
+            windows_2.add(cuboid([x + 70, 30, 10], [10, 15, 1]));
+            windows_2.add(cuboid([x + 90, 30, 10], [10, 15, 1]));
+            windows_2.add(cuboid([x + 110, 30, 10], [10, 15, 1]));
+
+            // Втори етаж
+            windows_2.add(cuboid([x + 70, 10, 10], [10, 15, 1]));
+            windows_2.add(cuboid([x + 90, 10, 10], [10, 15, 1]));
+            windows_2.add(cuboid([x + 115, 10, 10], [20, 15, 1]));
+
+            // Първи етаж
+            windows_2.add(cuboid([x + 70, -10, 10], [10, 15, 1]));
+            windows_2.add(cuboid([x + 90, -10, 10], [10, 15, 1]));
+            windows_2.add(cuboid([x + 115, -10, 10], [20, 15, 1]));
+
+            // Партер
+            windows_2.add(cuboid([x + 110, -30, 10], [10, 15, 1]));
+            city.add(cuboid([x + 75, -45, 10], [20, 30, 1]).custom({
+                color: [160 / 255, 82 / 255, 45 / 255]
+            }));
+            windows_2.mergeColor();
+            windows_2.color = [240 / 255, 230 / 255, 140 / 255];
+            block_2.add(windows_2);
+            
+            road.add(city);
+        }
+
+        // Изграждане на пътна табела от няколко куба
+        function generateTable(x) {
+
+            table = group([]);
+
+            t_base = cuboid([x, -50, 20], [40, 70, 1]).custom({
+                color: [220 / 255, 220 / 255, 220 / 255]
+            });
+            t_base.spin = -1.57;
+
+            table.add(t_base);
+
+            table.add(cuboid([(x - 20), -75, 2], [5, 60, 1]).custom({
+                color: [105 / 255, 105 / 255, 105 / 255]
+            }));
+            table.add(cuboid([(x + 20), -75, 2], [5, 60, 1]).custom({
+                color: [105 / 255, 105 / 255, 105 / 255]
+            }));
+            road.add(table);
+        }
+
+        // Нанасяне на текстурите върху табелите
+        function drawTables() {
+
+            for (var i = 2500; i <= 25000; ++i) {
+
+                switch (i) {
+
+                    case 2500:
+
+                        generateTable(i);
+                        t_base.image = new Suica.Image('50km.jpg');
+
+                    case 5000:
+                        generateTable(i);
+                        t_base.image = new Suica.Image('100km.jpg');
+
+                    case 7500:
+                        generateTable(i);
+                        t_base.image = new Suica.Image('150km.jpg');
+
+                    case 10000:
+                        generateTable(i);
+                        t_base.image = new Suica.Image('200km.jpg');
+
+                    case 12500:
+                        generateTable(i);
+                        t_base.image = new Suica.Image('250km.jpg');
+
+                    case 15000:
+                        generateTable(i);
+                        t_base.image = new Suica.Image('300km.jpg');
+
+                    case 17500:
+                        generateTable(i);
+                        t_base.image = new Suica.Image('350km.jpg');
+
+                    case 20000:
+                        generateTable(i);
+                        t_base.image = new Suica.Image('400km.jpg');
+
+                    case 22500:
+                        generateTable(i);
+                        t_base.image = new Suica.Image('450km.jpg');
+
+                    case 25000:
+                        generateTable(i);
+                        t_base.image = new Suica.Image('500km.jpg');
+                        break;
+                }
+            }
+        }
+
+        // Функция за стартиране на двигателя
+        function startEngine() {
+            // console.log("startEngine()...");
+
+            // Не стартирай, ако не е зададена скорост 
+            if (v == 0) {
+
+                return;
+            }
+
+            engine = true;
+            s.nextFrame = motion;
+
+            // Цвят на фара при стартиране/движение - Gold
+            light.color = [1, 215 / 255, 0];
+
+        }
+
+        // Функция за спиране на двигателя/симулацията на движение
+        function stopEngine() {
+            // console.log("stopEngine()...");
+
+            engine = false;
+            s.nextFrame = undefined;
+
+            light.color = [240 / 255, 1, 1];
+            sun.color = [240 / 255, 230 / 255, 140 / 255];
+
+        }
+
+        // Функция за увеличаване на скоростта
+        function acceleration() {
+            // console.log("acceleration()...");
+
+            // Не изпълнявай, ако текущата скорост е 200km/h (1000 единици) или автомобилът е в движение(второто е заради условието за постоянна скорост).
+            if (v == 1000 || engine == true) {
+                //console.log("!acceleration()...");
+                return;
+            }
+
+            v += 25;
+
+            document.getElementById('v').innerHTML = "v = " + (v / 5) + "km/h";
+        }
+
+        // Функция за намаляне на скоростта
+        function slowDown() {
+            // console.log("slowDown()...");
+
+            // Не изпълнявай, ако текущата скорост е 0km/h или автомобилът е в движение(второто е заради условието за постоянна скорост).
+            if (v == 0 || engine == true) {
+                //console.log("!slowDown()...");
+
+                return;
+            }
+
+            v -= 25;
+
+            document.getElementById('v').innerHTML = "v = " + (v / 5) + "km/h";
+
+        }
+
+        // Функция за превключване на движението напред
+        function forward() {
+            // console.log("forward()...");
+
+            ahead = true;
+            back = false;
+        }
+
+        // Функция за превключване на движението назад
+        function reverse() {
+            // console.log("reverse()...");
+
+            if (engine == true) {
+
+                stopEngine();
+            }
+
+            ahead = false;
+            back = true;
+        }
+
+        // Изчисляване на стойностите на "S" и "t"
+        function distanceTime() {
+
+            S = Math.abs((-road.center[0] * 20)).toFixed(0);
+
+            document.getElementById('S').innerHTML = "S = " + S + "m";
+
+            // Време - делейки на 1000, получаваме представянето в km, а чрез деленето на скоростта на 5 получаваме желаната скорост: 0, 5, 10... 200km/h. Накрая използваме формулата, че t = S/v
+            t = ((S / 1000) / (v / 5)).toFixed(2);
+
+            document.getElementById('t').innerHTML = "t = " + t + "h";
+
+        }
+
+        // Функция за симулиране на движението на колата по пътя
+        function motion() {
+            // console.log("motion()...");
+
+            // Ако сме в началото, позволяваме единствено движението напред
+            if (road.center[0] > 0) {
+
+                stopEngine();
+                ahead = true;
+                back = false;
+            }
+
+            // Ако сме в края, позволяваме единствено движението назад
+            if (S >= 500000) {
+
+                stopEngine();
+
+                blink = true;
+                ahead = false;
+                back = true;
+            }
+
+            // Ако се движим напред изменяме центъра на пътя по оста X назад симулирайки движението на автомобила напред
+            if (back == false) {
+
+                sun.color = ([240 / 255, 230 / 255, 140 / 255]);
+
+                // Скорост - изменението на центъра на пътя по оста X (25 единици в секунда - 5km/h, макс. скорост: 1000 единици за секунда или 200km/h)
+                road.center[0] -= Suica.dTime * v;
+                r = Suica.time;
+
+                // Ако се движим напред...
+            } else {
+
+                road.center[0] += Suica.dTime * v;
+                r = -Suica.time;
+
+                if (blink == false) {
+
+                    sun.color = [220 / 255, 20 / 255, 60 / 255];
+                    blink = true;
+
+                } else {
+
+                    sun.color = [240 / 255, 230 / 255, 140 / 255];
+                    blink = false;
+                }
+            }
+
+            tyre_b_v_r.spin = r * (v / 5);
+            tyre_b_h_r.spin = r * (v / 5);
+            tyre_f_v_r.spin = r * (v / 5);
+            tyre_f_h_r.spin = r * (v / 5);
+
+            distanceTime();
+        }
+
+        // Изчисляване на лице на триъгълник по координати на три върха по формулата:
+        // За триъг.: ABC и координати: x, y => Лицето: S = |Ax(By-Cy)+Bx(Cy-Ay)+Cx(Ay-By)|/|2|
+        function area(a, b, c) {
+
+            return Math.abs((a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1])) / 2);
+        }
+
+        // Помощна функция за определяне дали се натиска върху бутон за ускоряване/намаляне
+        function isInsideTriangle(p, a, b, c) {
+
+            var ABC = area(a, b, c);
+            var PAB = area(p, a, b);
+            var PBC = area(p, b, c);
+            var PAC = area(p, a, c);
+
+            // Ако лицата на трите триъгълника с обща точка "p" не съвпадат с лицето на големият триъгълник, то точката "p" не лежи в него
+            if ((PAB + PBC + PAC) == ABC) {
+
+                return true;
+
+            } else {
+
+                return false;
+            }
+        }
+
+        // Отчитане на величината за преобразуване от една стойност към друга
+        function getValue_1() {
+
+            return document.getElementById('sel_1').value;
+        }
+
+        // Отчитане на преобразуваната величина
+        function getValue_2() {
+
+            return document.getElementById('sel_2').value;
+        }
+
+        // Задаване на преобразуваната стойност
+        function setValue_2(v) {
+
+            document.getElementById('txt_area_2').value = v;
+        }
+
+        // Функция за конвертиране на стойностти от една величина към друга
+        function convert() {
+
+            var number = document.getElementById('txt_area_1').value;
+
+            var value_1 = getValue_1();
+            var value_2 = getValue_2();
+
+            // Запазване на стойността ако преобразуването е от една величина към същата величина
+            if (value_1 == value_2) {
+
+                setValue_2(number);
+
+            }
+
+            // Преобразуване от метър към друга величина
+            else if (value_1 == 1) {
+
+                // Преобразуване от метри в километри
+                if (value_2 == 2) {
+
+                    setValue_2(number / 1000);
+                }
+
+                // Забраняване на преобразуването от метри в секунди, минути, часове
+                else if (value_2 == 3 || value_2 == 4 || value_2 == 5) {
+                    setValue_2(null);
+                }
+
+            }
+
+            // Преобразуване от километър към друга величина
+            else if (value_1 == 2) {
+
+                // Преобразуване от километри в метри
+                if (value_2 == 1) {
+
+                    setValue_2(number * 1000);
+                }
+
+                // Забраняване на преобразуването от километри в секунди, минути, часове
+                else if (value_2 == 3 || value_2 == 4 || value_2 == 5) {
+
+                    setValue_2(null);
+
+                }
+            }
+
+            // Преобразуване от секунда към друга величина
+            else if (value_1 == 3) {
+
+                // Преобразуване от секунди в минути
+                if (value_2 == 4) {
+
+                    setValue_2(number / 60);
+                }
+
+                // Преобразуване от секунди в часове
+                else if (value_2 == 5) {
+
+                    setValue_2(number / 3600);
+                }
+
+                // Забраняване на преобразуването от секунди в метри, километри
+                else if (value_2 == 1 || value_2 == 2) {
+
+                    setValue_2(null);
+                }
+
+            }
+
+            // Преобразуване от минута към друга величина
+            else if (value_1 == 4) {
+
+                // Преобразуване от минути в секунди
+                if (value_2 == 3) {
+
+                    setValue_2(number * 60);
+
+                }
+
+                // Преобразуване от минути в часове
+                else if (value_2 == 5) {
+
+                    setValue_2(number / 60);
+
+                }
+
+                // Забраняване на преобразуването от минути в метри, километри
+                else if (value_2 == 1 || value_2 == 2) {
+
+                    setValue_2(null);
+
+                }
+
+            }
+
+            // Преобразуване от час към друга величина
+            else if (value_1 == 5) {
+
+                // Преобразуване от часове в секунди
+                if (value_2 == 3) {
+
+                    setValue_2(number * 3600);
+
+                }
+
+                // Преобразуване от часове в минути
+                else if (value_2 == 4) {
+
+                    setValue_2(number * 60);
+
+                }
+
+                // Забраняване на преобразуването от часове в метри, километри
+                else if (value_2 == 1 || value_2 == 2) {
+
+                    setValue_2(null);
+
+                }
+            }
+
+        }
+
+        // Показване/скриване на секцията с формули за преобразуване
+        function showFormulas() {
+
+            var e = document.getElementById('formulas');
+
+            if (e.style.display != 'block') {
+
+                e.style.display = 'block';
+
+            } else {
+
+                e.style.display = 'none';
+            }
+        }
+
+        // Показване/скриване на бутона отговарящ за секцията с формули за преобразуване
+        function showFormulasButton() {
+
+            var e = document.getElementById('formulasbutton');
+
+            if (e.style.visibility == 'hidden') {
+
+                e.style.visibility = 'visible';
+
+            } else {
+
+                e.style.visibility = 'hidden';
+            }
+        }
+
+        // Обработване на натискане на бутон на мишката - следим дали натискането е върху някои от двата бутона за промяна на скоростта
+        function mouseDown(event) {
+
+            // Позиция на курсора на мишката спрямо локалната координатна система
+            var x = event.clientX - s.gl.canvas.offsetLeft - 5 - s.gl.canvas.clientWidth / 2 + (window.scrollX | window.pageXOffset);
+            var y = -(event.clientY - s.gl.canvas.offsetTop - 5 - s.gl.canvas.clientHeight / 2 + (window.scrollY | window.pageYOffset));
+
+            // три точки определящо бутона за увеличаване на скоростта
+            var a = [270, 170, 0];
+            var b = [245, 130, 0];
+            var c = [295, 130, 0];
+
+            // три точки определящи бутона за намаляване на скоростта
+            var d = [245, 115, 0];
+            var e = [295, 115, 0];
+            var f = [270, 70, 0];
+
+            // Ако точката "p" с координати: координатите на мишката, се намира в триъгълника отчитам натискането на бутона
+            if (isInsideTriangle([x, y], a, b, c)) {
+
+                accelerate = true;
+
+                acc.color = [220 / 255, 20 / 255, 60 / 255];
+                acc_m.color = [1, 215 / 255, 0];
+
+            } else if (isInsideTriangle([x, y], d, e, f)) {
+
+                brakes = true;
+
+                br.color = [220 / 255, 20 / 255, 60 / 255];
+                br_m.color = [1, 215 / 255, 0];
+
+            }
+        }
+
+        // Обработване на пускането на бутон на мишката - симулираме натискането със смяна на цвета на бутоните
+        function mouseUp(event) {
+
+            if (accelerate == true) {
+
+                acceleration();
+                accelerate = false;
+
+                acc.color = [1, 215 / 255, 0];
+                acc_m.color = [220 / 255, 20 / 255, 60 / 255];
+
+
+            } else if (brakes == true) {
+
+                slowDown();
+                brakes = false;
+
+                br.color = [1, 215 / 255, 0];
+                br_m.color = [220 / 255, 20 / 255, 60 / 255];
+            }
+        }
+
+    </script>
+</head>
+
+<body onload="main()">
+    <noscript>За съжаление, браузърът Ви не поддържа JavaScript!</noscript>
+
+    <h1>Път, скорост и време на движение</h1>
+    <h4>Проект по Езици и среди за програмиране<br>Мартин Бялов | 50438 | 2018</h4>
+
+    <div class="section">
+
+        <a id="1">
+            <h2>I. Увод</h2>
+        </a>
+
+        <p><em>Скоростта</em> на даден е обект e мярка за бързината на промяна на неговото положение по отношение на изминатия <em>път</em> за единица <em>време</em>.<br></p>
+
+        <img src="Images/train.jpg">
+
+        <p><em>Път</em> се нарича дължината на <em>траекторията</em> (мислената линия), която обекта описва при своето движение за определено <em>време</em>. Пътят се измерва с единиците за дължина – милиметри (<em>mm</em>), сантиметри (<em>cm</em>), метри (<em>m</em>), километри (<em>km</em>) и други, аналогично за времето – секунди (<em>s</em>), минути (<em>min</em>), часове (<em>h</em>) и други.</p>
+    </div>
+
+    <div class="section">
+
+        <a id="2">
+            <h2>II. Урок</h2>
+        </a>
+
+        <p>Скоростта, изминатия път и времето са <em>величини</em> (характеристиките на отделните обекти, вещества и процеси изразени с числа), които характеризират процеса на движение на даден обект. Прието е скоростта да се изразява с латинската буква <em>v</em>, изминатия път с <em>S</em> и времето с <em>t</em>. При равномерно движение (движение, при което за равни интервали от време обекта изминава равни пътища) скоростта <em>v</em> e равна на отношението на изминатия път <em>S</em> към времето <em>t</em>, за което този път е изминат:</p>
+
+        <p formula><em>скорост = път / времето</em></p>
+        <p>или:</p>
+        <p formula><em>v = S / t<br>t = S / v<br>S = v . t<br></em></p>
+
+    </div>
+
+    <div class="section">
+
+        <a id="3">
+            <h2>III. Задачи</h2>
+        </a>
+        <p>За решаването на следните задачи използвайте формулите в <a href="#2">II</a> и интерактивното поле в <a href="#4">IV</a>. Указания за работа с интерактивното поле ще намерите в <a href="#5">V</a>, а примерни решения на задачите в <a href="#6">VI</a>.</p>
+        <p class="task"><a id="31">Задача №1</a></p>
+        <p>Колко време ще е необходимо на автомобил тръгващ от град София да стигне до град Варна, ако се движи с постоянна скорост от
+            <em_2>80 km/h</em_2>?</p>
+        <p class="task"><a id="32">Задача №2</a></p>
+        <p>Колко километра ще е изминал автомобил за
+            <em_2>15 минути</em_2>, ако се е движил със постоянна скорост от
+            <em_2>50 m/s</em_2>?</p>
+        <p class="task"><a id="33">Задача №3</a></p>
+        <p>Двама състезатели се надпреварвали на писта с дължина
+            <em_2>100km</em_2>. С каква постоянна скорост (в
+            <em_2>km/h</em_2>) се е движил вторият състезател, ако първият се е движил със скорост от
+            <em_2>125 km/h</em_2> и е завършил трасето с
+            <em_2>30 минути</em_2> по – рано от първия?</p>
+    </div>
+
+     <a id="4">
+        <h5>IV. Интерактивно поле</h5>
+    </a>
+    
+    <div class="button"><a id='a' onclick="location.reload()">Начало</a></div>
+    <div class="button" onclick="startEngine()">Стартиране</div>
+    <div class="button" onclick="stopEngine()">Спиране</div>
+    <div class="button" onclick="forward()">Напред</div>
+    <div class="button" onclick="reverse()">Назад</div>
+
+    <canvas id='suica_canvas' width="700" height="400">За съжаление, графичното съдържание не може да бъде заредено!</canvas>
+    
+    <div class="block" onmouseover="showFormulasButton()">
+
+        <txt>Конвертиране от:</txt><textarea onkeyup="convert()" id='txt_area_1' rows="1" cols="1" maxlength="12"></textarea>
+        <select id='sel_1' onchange="getValue()" onclick="convert()">
+        <option value="1">метра</option>
+        <option value="2">километра</option>
+        <option value="3">секунда/и</option>
+        <option value="4">минута/и</option>
+        <option value="5">час/а</option>
+        
+    </select>
+
+        <txt_2>към:</txt_2><textarea id='txt_area_2' rows="1" cols="1" maxlength="12" disabled></textarea>
+
+        <select id='sel_2' onclick="convert()">
+            <option value="1">метра</option>
+            <option value="2">километра</option>
+             <option value="3">секунда/и</option>
+        <option value="4">минута/и</option>
+        <option value="5">час/а</option>
+            
+        </select>
+    </div>
+    <div class="buttonbottom" id='formulasbutton' onclick="showFormulas()">Формули</div>
+    <div class="section" id="formulas" hidden>
+        
+            <h3>метър &harr; километър</h3>
+            <p formula><em>1m = 1km / 1000</em></p>
+            <h3>секунда &harr; минута &harr; час</h3>
+            <p formula><em>1s = 1min / 60 = 1h / 3600</em></p>
+    </div>
+    
+    <div class="section">
+
+        <a id="5">
+            <h2>V. Указания за работа</h2>
+        </a>
+
+            <em_2>Лента с опции</em_2> (над интерактивното поле):
+            <ul>
+                <li><em>Начало</em> – връща автомобила в началното му състояние и изчиства таблото със стойности;</li>
+                <li><em>Стартиране</em> – ако е зададена скорост различна от
+                    <em_2>0</em_2> автомобилът започва да се движи в определената посока със зададената скорост;</li>
+                <li><em>Спиране</em> – автомобилът спира да се движи;</li>
+                <li><em>Напред</em> – ако тази опция е включена автомобилът се движи напред (ако е достигнат края на пътя опцията се блокира позволявайки единствено движението назад);</li>
+                <li><em>Назад</em> - ако тази опция е включена автомобилът се движи назад (ако автомобила е в начална позиция опцията се блокира позволявайки единствено движението напред).</li>
+            </ul>
+        
+
+        
+            <em_2>Бутони за смяна на скоростта</em_2> (горен десен ъгъл на полето):
+            <ul>
+                <li><em>Нагоре</em> – с натискане върху бутона с мишката скоростта на автомобила се увеличава автоматично с
+                    <em_2>5km/h</em_2>. Скоростта се увеличава предварително, преди стартирането на автомобила, като максималната такава е
+                    <em_2>200km/h</em_2>;</li>
+                <li><em>Надолу</em> – с натискане върху бутона с мишката скоростта на автомобила се намалява автоматично с
+                    <em_2>5km/h</em_2>.</li>
+            </ul>
+        
+
+       
+            <em_2>Табло с изчислени стойностти</em_2> (горен ляв ъгъл на полето):
+            <ul>
+                <li>Показва стойностите за скорост (в
+                    <em_2>километри в час</em_2>), път (в
+                    <em_2>метри</em_2>) и време (в
+                    <em_2>часове</em_2>) отговарящи на състоянието на автомобила в даденият момент. </li>
+            </ul>
+       
+
+        
+            <em_2>Панел за конвертиране на стойности</em_2> (под полето):
+            <ul>
+                <li>В първото текстово поле указваме желаната стойност за преобразуване. След избиране на мерни единици, преобразуваната стойност се показва във второто текстово поле. Панелът конвертира стойности от/към:
+                    <em_2>метър</em_2>,
+                    <em_2>километър</em_2>,
+                    <em_2>секунда</em_2>,
+                    <em_2>минута</em_2>,
+                    <em_2>час</em_2>. Ако е избрано неподходящо преобразование стойността няма да се конвертира.</li>
+            </ul>
+        
+    </div>
+
+    <div class="section">
+        <a id="6">
+            <h2>VI. Решения на задачите</h2>
+        </a>
+
+        <p class="task"><a href="#31">Задача №1</a></p>
+        <a href="Images/solution_1.2.jpg" target="_blank"><img src="Images/solution_1.1.jpg" style="border:none; float: right; margin-right: 35px;"></a>
+        <br>
+        <p style="text-align: left">От бутона за скорости задаваме началната скорост на автомобила да бъде
+            <em_2>80km/h</em_2>. Стартираме двигателя и след като автомобилът преустанови движението си получаваме резултат за
+            <em_2>t = 6,25h</em_2>. Проверяваме резултата по формулата:
+            <em_2>t = S / v</em_2> и получаваме, че
+            <em_2>t = 500 / 6,25 = 80km/h</em_2>.</p>
+
+        <br>
+        <p class="task"><a href="#32">Задача №2</a></p>
+        <p>Предварително чрез панела за конвертиране преобразуваме дадените ни стойности за време и скорост, като за
+            <em_2>t = 15min</em_2> получаваме, че
+            <em_2>t = 0,25h</em_2>, а за
+            <em_2>v = 50m/s</em_2> получаваме, че
+            <em_2>v = 0,05km/s</em_2>.<br><br><img src="Images/solution_2.1.jpg" style="border: none; width: 535px"></p>
+        <p>След бърз поглед върху формулата (под таблото за конвертиране) за преобразуване на секунди в часове (в обратен ред:
+            <em_2>1h = 1s . 3600</em_2>) получаваме за
+            <em_2>v = 0,05 . 3600 = 180km/h</em_2>.</p>
+
+        <a href="Images/solution_2.3.jpg" target="_blank"><img src="Images/solution_2.2.jpg" style="border:none; float: right; margin-right: 35px;"></a>
+
+        <br>
+        <p style="text-align: left">Задаваме началната скорост на автомобила да бъде
+            <em_2>180km/h</em_2>, стартираме двигателя, отчитаме
+            <em_2>25 минути</em_2> (или
+            <em_2>0,25h</em_2>) и така достигаме до крайният резултат
+            <em_2>45km</em_2>. Проверяваме резултата по формулата
+            <em_2>S = v . t</em_2> и получаваме, че
+            <em_2>S = 180 . 0,25 = 45km/h</em_2>.</p>
+        <br><br>
+
+        <p class="task"><a href="#33">Задача №3</a></p>
+        <a href="Images/solution_3.2.jpg" target="_blank"><img src="Images/solution_3.1.jpg" style="border:none; float: right; height: 150px; width: 100px; margin: 15px 48px 0 0;"></a>
+        <br>
+        <p style="text-align: left">Задаваме началната скорост на автомобила на първият състезател да бъде
+            <em_2>125km/h</em_2>, стартираме двигателя, поглеждаме формулата за преобразуване на километри в метри (в обратен ред:
+            <em_2>1km = 1 . 1000m</em_2>) и отчитаме изминато разстояние
+            <em_2>100000m</em_2>, така получаваме за
+            <em_2>t1 = 0,80h</em_2> (или
+            <em_2>48 минути</em_2>).<img src="Images/solution_3.3.jpg" style="border: none; width: 535px"></p>
+
+        <p>От условието на задачата за времето на вторият състезател получаваме, че
+            <em_2>t2 = t1 + 48min</em_2> (завършил трасето с 4 минути по-късно от първия) или
+            <em_2>t2 = 48 + 4 = 52min</em_2> (или
+            <em_2>≈ 0,87h</em_2>),
+
+            <img src="Images/solution_3.4.jpg" style="border: none; width: 535px; margin: 1.5em 0 0 0"><a href="Images/ solution_3.6.jpg" target="_blank">
+            <img src="Images/solution_3.5.jpg" style="border:none; float: right; height: 150px; width: 100px;"></a>
+        </p>
+
+
+        <p>откъдето за скоростта му ще следва, че
+            <em_2>v2 = S / t2 = 100 / 0,87 ≈ 115km/h</em_2>. Сверяваме полученият резултат с този от таблото с изчислени стойностти при
+            <em_2>v = 115km/h</em_2>,
+            <em_2>S = 100km</em_2> и получаваме, че
+            <em_2>t = 0,87h</em_2>, колкото и получихме за времето на вторият състезател.</p>
+        <br>
+    </div>
+    <br>
+    <h4 style="color: darkslategray">2018</h4>
+    
+    <div id='b' class="border"></div>
+    <div id='v' class="label">v =</div>
+    <div id='S' class="label">S =</div>
+    <div id='t' class="label">t =</div>
+    
+</body>
+</html>
