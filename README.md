@@ -1,5 +1,5 @@
 # Distance, velocity, time
 
-Interactive example for children
+Interactive example for children preview:
 
-https://htmlpreview.github.io/?https://github.com/MartinByalov/Distance-velocity-time/blob/master/Distance%2Cvelocity%2Ctime.html
+https://martinbyalov.github.io/Distance-velocity-time/
